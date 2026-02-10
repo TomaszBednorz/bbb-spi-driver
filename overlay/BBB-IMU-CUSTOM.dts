@@ -2,6 +2,7 @@
 /plugin/;
 
 #include <dt-bindings/pinctrl/am33xx.h>
+#include <dt-bindings/interrupt-controller/irq.h>
 
 / {
 	/*
@@ -14,6 +15,7 @@
 			P9_29_pinmux { status = "disabled"; };
 			P9_30_pinmux { status = "disabled"; };
 			P9_31_pinmux { status = "disabled"; };
+			P9_25_pinmux { status = "disabled"; };
 		};
 	};
 
@@ -25,10 +27,11 @@
 		__overlay__ {
 			bb_spi1_pins: pinmux_bb_spi1_pins {
 				pinctrl-single,pins = <
-					AM33XX_PADCONF(AM335X_PIN_MCASP0_ACLKX, PIN_INPUT, MUX_MODE3)
-					AM33XX_PADCONF(AM335X_PIN_MCASP0_FSX, PIN_INPUT, MUX_MODE3)
-					AM33XX_PADCONF(AM335X_PIN_MCASP0_AXR0, PIN_INPUT, MUX_MODE3)
-					AM33XX_PADCONF(AM335X_PIN_MCASP0_AHCLKR, PIN_INPUT, MUX_MODE3)
+					AM33XX_PADCONF(AM335X_PIN_MCASP0_ACLKX, PIN_INPUT, MUX_MODE3)            /*  SPI1 D1 (MOSI) */
+					AM33XX_PADCONF(AM335X_PIN_MCASP0_FSX, PIN_INPUT, MUX_MODE3)              /*  SPI1 D0 (MISO) */
+					AM33XX_PADCONF(AM335X_PIN_MCASP0_AXR0, PIN_INPUT, MUX_MODE3)             /*  SPI1 CLK */
+					AM33XX_PADCONF(AM335X_PIN_MCASP0_AHCLKR, PIN_OUTPUT, MUX_MODE3)          /*  SPI1 CS */
+					AM33XX_PADCONF(AM335X_PIN_MCASP0_AHCLKX, PIN_INPUT_PULLDOWN, MUX_MODE7)	 /*  GPIO for IMU interrupt */
 				>;
 			};
 		};
@@ -42,9 +45,12 @@
 			pinctrl-0 = <&bb_spi1_pins>;
 
             imu@0 {
-                compatible = "custom,imu-lsm6dso";
+				compatible = "custom,imu-lsm6dso";
                 reg = <0>;
-                
+
+				interrupt-parent = <&gpio3>;
+				interrupts = <21 IRQ_TYPE_EDGE_RISING>;
+
                 spi-max-frequency = <10000000>; /* 10 MHz */
                 spi-bits-per-word = <8>;
             };
