@@ -6,10 +6,18 @@
 
 #include "imu_lsm6dso_cfg.h"
 
-static const struct regmap_config imu_lsm6dsx_regmap_config = {
+static const struct regmap_config imu_lsm6dso_regmap_config = {
 	.reg_bits = 8,
 	.val_bits = 8,
 };
+
+static const struct iio_chan_spec imu_lsm6dso_acc_channels[] = {
+	IMU_LSM6DSO_CHANNEL_ACC(IMU_LSM6DSO_REG_OUTX_L_ADDR, IIO_MOD_X, 0),
+	IMU_LSM6DSO_CHANNEL_ACC(IMU_LSM6DSO_REG_OUTY_L_ADDR, IIO_MOD_Y, 1),
+	IMU_LSM6DSO_CHANNEL_ACC(IMU_LSM6DSO_REG_OUTZ_L_ADDR, IIO_MOD_Z, 2),
+	IIO_CHAN_SOFT_TIMESTAMP(3),
+};
+
 
 static int imu_lsm6dso_check_whoami(struct imu_lsm6dso_data *data)
 {
@@ -31,32 +39,33 @@ static int imu_lsm6dso_check_whoami(struct imu_lsm6dso_data *data)
 	return 0;
 }
 
-static int imu_lsm6dso_alloc_iiodev(struct imu_lsm6dso_data *data)
+static int imu_lsm6dso_alloc_iiodev_acc(struct imu_lsm6dso_data *data)
 {
+	static const unsigned long scan_masks[] = { 0x7, 0x0 };
 	struct imu_lsm6dso_sensor *sensor;
+	struct iio_dev *iio_dev;
 
-	data->iio_dev = devm_iio_device_alloc(data->dev, sizeof(*sensor));	
+	iio_dev = devm_iio_device_alloc(data->dev, sizeof(*sensor));	
 
-	if(NULL == data->iio_dev)
+
+	if(NULL == iio_dev)
 	{
 		dev_err(data->dev, "Failed to allocate IIO device\n");
 		return -ENOMEM;
 	}	
 
-
-	data->iio_dev->name = "imu-lsm6dso"; // 2 - accel and gyrp
-
-	// Configura accel and guro channels here (not implemented in this snippet)
-	// Add a configuration for Accel and gyro
-
+	iio_dev->name = "imu-lsm6dso-acc";
 	iio_dev->modes = INDIO_DIRECT_MODE;
-	iio_dev->available_scan_masks = st_lsm6dsx_available_scan_masks;
-	iio_dev->channels = hw->settings->channels[id].chan;
-	iio_dev->num_channels = hw->settings->channels[id].len;
+	iio_dev->available_scan_masks = scan_masks;
+	iio_dev->channels = imu_lsm6dso_acc_channels;
+	iio_dev->num_channels = ARRAY_SIZE(imu_lsm6dso_acc_channels);
 
 	sensor = iio_priv(iio_dev);
-	sensor->id = id;
-	sensor->hw = hw;
+	sensor->id = IMU_LSM6DSO_ID_ACC;
+	sensor->data = data;
+
+
+	// continue - add cofg for this
 	sensor->odr = hw->settings->odr_table[id].odr_avl[0].milli_hz;
 	sensor->gain = hw->settings->fs_table[id].fs_avl[0].gain;
 	sensor->watermark = 1;
@@ -75,9 +84,10 @@ static int imu_lsm6dso_alloc_iiodev(struct imu_lsm6dso_data *data)
 	default:
 		return NULL;
 	}
-	iio_dev->name = sensor->name;
+	// end of config for this
 
-	return iio_dev;
+
+	data->iio_dev_acc = iio_dev;
 
 	return 0;
 }
@@ -91,7 +101,7 @@ static int imu_lsm6dso_probe(struct spi_device *spi)
     pr_info("%s: probe called for SPI device %s (CS=%d)\n", DRIVER_NAME, dev_name(&spi->dev), spi->chip_select);
 
     /* Initialize the SPI regmap */
-	regmap = devm_regmap_init_spi(spi, &imu_lsm6dsx_regmap_config);
+	regmap = devm_regmap_init_spi(spi, &imu_lsm6dso_regmap_config);
 	if (IS_ERR(regmap)) 
 	{
 		dev_err(&spi->dev, "Failed to register spi regmap %ld\n", PTR_ERR(regmap));
