@@ -79,12 +79,32 @@ static ssize_t imu_lsm6dso_sysfs_scale_avail(struct device *dev, struct device_a
 	return 0;
 }
 
+static int imu_lsm6dso_read(struct imu_lsm6dso_data *data, unsigned int reg, unsigned int *val)
+{
+	return regmap_read(data->regmap, reg, val);
+}
+
+static int imu_lsm6dso_write(struct imu_lsm6dso_data *data, unsigned int reg, unsigned int val)
+{
+	return regmap_write(data->regmap, reg, val);
+}
+
+static int imu_lsm6dso_update_bit(struct imu_lsm6dso_data *data, unsigned int reg, unsigned int bitmask)
+{
+	return regmap_update_bits(data->regmap, reg, bitmask, bitmask);
+}
+
+static int imu_lsm6dso_update_bits(struct imu_lsm6dso_data *data, unsigned int reg, unsigned int mask, unsigned int val)
+{
+	return regmap_update_bits(data->regmap, reg, mask, val);
+}
+
 static int imu_lsm6dso_check_whoami(struct imu_lsm6dso_data *data)
 {
 	int err;
     unsigned int reg_val;
 
-	err = regmap_read(data->regmap, IMU_LSM6DSO_REG_WHO_AM_I_ADDR, &reg_val);
+	err = imu_lsm6dso_read(data, IMU_LSM6DSO_REG_WHO_AM_I_ADDR, &reg_val);
 
 	if (err < 0) {
 		dev_err(data->dev, "Failed to read whoami register\n");
@@ -132,6 +152,81 @@ static int imu_lsm6dso_alloc_iiodev_acc(struct imu_lsm6dso_data *data)
 	return 0;
 }
 
+static int imu_lsm6dso_init(struct imu_lsm6dso_data *data)
+{
+	int err;
+
+	/* IMU SW reset */
+	err = imu_lsm6dso_update_bit(data, IMU_LSM6DSO_REG_CTRL3_ADDR, IMU_LSM6DSO_REG_CTRL3_RESET_BITMASK);
+	if (err < 0)
+		return err;
+
+	msleep(50);
+
+	/* Reboot memory content */
+	err = imu_lsm6dso_update_bit(data, IMU_LSM6DSO_REG_CTRL3_ADDR, IMU_LSM6DSO_REG_CTRL3_BOOT_BITMASK);
+	if (err < 0)
+		return err;
+
+	msleep(50);
+
+	// Start - TODO
+
+	// /* enable Block Data Update */
+	// reg = &hw->settings->bdu;
+	// err = regmap_update_bits(hw->regmap, reg->addr, reg->mask,
+	// 			 ST_LSM6DSX_SHIFT_VAL(1, reg->mask));
+	// if (err < 0)
+	// 	return err;
+
+	// /* enable FIFO watermak interrupt */
+	// err = st_lsm6dsx_get_drdy_reg(hw, &reg);
+	// if (err < 0)
+	// 	return err;
+
+	// err = regmap_update_bits(hw->regmap, reg->addr, reg->mask,
+	// 			 ST_LSM6DSX_SHIFT_VAL(1, reg->mask));
+	// if (err < 0)
+	// 	return err;
+
+	// /* enable Latched interrupts for device events */
+	// if (hw->settings->irq_config.lir.addr) {
+	// 	reg = &hw->settings->irq_config.lir;
+	// 	err = regmap_update_bits(hw->regmap, reg->addr, reg->mask,
+	// 				 ST_LSM6DSX_SHIFT_VAL(1, reg->mask));
+	// 	if (err < 0)
+	// 		return err;
+
+	// 	/* enable clear on read for latched interrupts */
+	// 	if (hw->settings->irq_config.clear_on_read.addr) {
+	// 		reg = &hw->settings->irq_config.clear_on_read;
+	// 		err = regmap_update_bits(hw->regmap,
+	// 				reg->addr, reg->mask,
+	// 				ST_LSM6DSX_SHIFT_VAL(1, reg->mask));
+	// 		if (err < 0)
+	// 			return err;
+	// 	}
+	// }
+
+	// /* enable drdy-mas if available */
+	// if (hw->settings->drdy_mask.addr) {
+	// 	reg = &hw->settings->drdy_mask;
+	// 	err = regmap_update_bits(hw->regmap, reg->addr, reg->mask,
+	// 				 ST_LSM6DSX_SHIFT_VAL(1, reg->mask));
+	// 	if (err < 0)
+	// 		return err;
+	// }
+
+	// err = st_lsm6dsx_init_shub(hw);
+	// if (err < 0)
+	// 	return err;
+
+	// return st_lsm6dsx_init_hw_timer(hw);
+
+	return 0;
+	// END - todo
+}
+
 
 static int imu_lsm6dso_probe(struct spi_device *spi)
 {
@@ -164,15 +259,15 @@ static int imu_lsm6dso_probe(struct spi_device *spi)
     /* Check the WHOAMI register to verify communication with the device */
 	err = imu_lsm6dso_check_whoami(imu_data);
 	if (err < 0)
-    {
         return err;
-    }
 
 	err = imu_lsm6dso_alloc_iiodev_acc(imu_data);
 	if(err < 0)	
-	{
 		return err;
-	}
+
+	err = imu_lsm6dso_init(imu_data);
+	if (err < 0)
+		return err;
 
 
 

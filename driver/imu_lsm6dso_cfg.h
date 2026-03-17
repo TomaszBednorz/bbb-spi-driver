@@ -8,11 +8,15 @@
 #define DRIVER_NAME "imu-lsm6dso"
 
 #define IMU_LSM6DSO_REG_WHO_AM_I_ADDR  (0x0F)
+#define IMU_LSM6DSO_REG_CTRL3_ADDR    (0x12)
 #define IMU_LSM6DSO_REG_OUTX_L_ADDR    (0x28)
 #define IMU_LSM6DSO_REG_OUTY_L_ADDR    (0x2A)
 #define IMU_LSM6DSO_REG_OUTZ_L_ADDR    (0x2C)
 
 #define IMU_LSM6DSO_REG_WHO_AM_I_VALUE  (0x6C)
+
+#define IMU_LSM6DSO_REG_CTRL3_RESET_BITMASK  (BIT(0))
+#define IMU_LSM6DSO_REG_CTRL3_BOOT_BITMASK   (BIT(7))
 
 #define IMU_LSM6DSO_CHANNEL_ACC(addr, mod, scan_idx)		\
 {									\
