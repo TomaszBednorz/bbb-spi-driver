@@ -170,61 +170,12 @@ static int imu_lsm6dso_init(struct imu_lsm6dso_data *data)
 
 	msleep(50);
 
-	// Start - TODO
-
-	// /* enable Block Data Update */
-	// reg = &hw->settings->bdu;
-	// err = regmap_update_bits(hw->regmap, reg->addr, reg->mask,
-	// 			 ST_LSM6DSX_SHIFT_VAL(1, reg->mask));
-	// if (err < 0)
-	// 	return err;
-
-	// /* enable FIFO watermak interrupt */
-	// err = st_lsm6dsx_get_drdy_reg(hw, &reg);
-	// if (err < 0)
-	// 	return err;
-
-	// err = regmap_update_bits(hw->regmap, reg->addr, reg->mask,
-	// 			 ST_LSM6DSX_SHIFT_VAL(1, reg->mask));
-	// if (err < 0)
-	// 	return err;
-
-	// /* enable Latched interrupts for device events */
-	// if (hw->settings->irq_config.lir.addr) {
-	// 	reg = &hw->settings->irq_config.lir;
-	// 	err = regmap_update_bits(hw->regmap, reg->addr, reg->mask,
-	// 				 ST_LSM6DSX_SHIFT_VAL(1, reg->mask));
-	// 	if (err < 0)
-	// 		return err;
-
-	// 	/* enable clear on read for latched interrupts */
-	// 	if (hw->settings->irq_config.clear_on_read.addr) {
-	// 		reg = &hw->settings->irq_config.clear_on_read;
-	// 		err = regmap_update_bits(hw->regmap,
-	// 				reg->addr, reg->mask,
-	// 				ST_LSM6DSX_SHIFT_VAL(1, reg->mask));
-	// 		if (err < 0)
-	// 			return err;
-	// 	}
-	// }
-
-	// /* enable drdy-mas if available */
-	// if (hw->settings->drdy_mask.addr) {
-	// 	reg = &hw->settings->drdy_mask;
-	// 	err = regmap_update_bits(hw->regmap, reg->addr, reg->mask,
-	// 				 ST_LSM6DSX_SHIFT_VAL(1, reg->mask));
-	// 	if (err < 0)
-	// 		return err;
-	// }
-
-	// err = st_lsm6dsx_init_shub(hw);
-	// if (err < 0)
-	// 	return err;
-
-	// return st_lsm6dsx_init_hw_timer(hw);
+	/* Enable block data update */
+	err = imu_lsm6dso_update_bit(data, IMU_LSM6DSO_REG_CTRL3_ADDR, IMU_LSM6DSO_REG_CTRL3_BDU_BITMASK);
+	if (err < 0)
+		return err;
 
 	return 0;
-	// END - todo
 }
 
 
@@ -269,9 +220,18 @@ static int imu_lsm6dso_probe(struct spi_device *spi)
 	if (err < 0)
 		return err;
 
+	if(NULL != imu_data->iio_dev_acc)
+	{
+		err = devm_iio_device_register(&spi->dev, imu_data->iio_dev_acc);
+		if (err < 0) 
+		{
+			dev_err(&spi->dev, "Failed to register IIO device: %d\n", err);
+			return err;
+		}
+	}
 
-
-    return 0;
+	pr_info("%s: probe successful\n", DRIVER_NAME);
+	return 0;
 }
 
 static int imu_lsm6dso_remove(struct spi_device *spi)
