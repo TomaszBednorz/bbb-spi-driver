@@ -3,8 +3,17 @@
 #include <linux/of.h>
 #include <linux/of_device.h>
 #include <linux/spi/spi.h>
+#include <linux/iio/sysfs.h>
 
 #include "imu_lsm6dso_cfg.h"
+
+
+static int imu_lsm6dso_read_raw(struct iio_dev *iio_dev, struct iio_chan_spec const *ch, int *val, int *val2, long mask);
+static int imu_lsm6dso_write_raw(struct iio_dev *iio_dev, struct iio_chan_spec const *chan, int val, int val2, long mask);
+static int imu_lsm6dso_hwfifo_set_watermark(struct iio_dev *iio_dev, unsigned int val);
+static int imu_lsm6dso_write_raw_get_fmt(struct iio_dev *indio_dev, struct iio_chan_spec const *chan, long mask);
+static ssize_t imu_lsm6dso_sysfs_sampling_frequency_avail(struct device *dev, struct device_attribute *attr, char *buf);
+static ssize_t imu_lsm6dso_sysfs_scale_avail(struct device *dev, struct device_attribute *attr, char *buf);
 
 static const struct regmap_config imu_lsm6dso_regmap_config = {
 	.reg_bits = 8,
@@ -18,6 +27,57 @@ static const struct iio_chan_spec imu_lsm6dso_acc_channels[] = {
 	IIO_CHAN_SOFT_TIMESTAMP(3),
 };
 
+static IIO_DEV_ATTR_SAMP_FREQ_AVAIL(imu_lsm6dso_sysfs_sampling_frequency_avail);
+static IIO_DEVICE_ATTR(in_accel_scale_available, 0444,
+		       imu_lsm6dso_sysfs_scale_avail, NULL, 0);
+
+static struct attribute *imu_lsm6dso_acc_attributes[] = {
+	&iio_dev_attr_sampling_frequency_available.dev_attr.attr,
+	&iio_dev_attr_in_accel_scale_available.dev_attr.attr,
+	NULL,
+};
+
+static const struct attribute_group imu_lsm6dso_acc_attribute_group = {
+	.attrs = imu_lsm6dso_acc_attributes,
+};
+
+static const struct iio_info imu_lsm6dso_acc_info = {
+	.attrs = &imu_lsm6dso_acc_attribute_group,
+	.read_raw = imu_lsm6dso_read_raw,
+	.write_raw = imu_lsm6dso_write_raw,
+	.hwfifo_set_watermark = imu_lsm6dso_hwfifo_set_watermark,
+	.write_raw_get_fmt = imu_lsm6dso_write_raw_get_fmt,
+};
+
+static int imu_lsm6dso_read_raw(struct iio_dev *iio_dev, struct iio_chan_spec const *ch, int *val, int *val2, long mask)
+{
+	return 0;
+}
+
+static int imu_lsm6dso_write_raw(struct iio_dev *iio_dev, struct iio_chan_spec const *chan, int val, int val2, long mask)
+{
+	return 0;
+}
+
+static int imu_lsm6dso_hwfifo_set_watermark(struct iio_dev *iio_dev, unsigned int val)
+{
+	return 0;
+}
+
+static int imu_lsm6dso_write_raw_get_fmt(struct iio_dev *indio_dev, struct iio_chan_spec const *chan, long mask)
+{
+	return 0;
+}
+
+static ssize_t imu_lsm6dso_sysfs_sampling_frequency_avail(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	return 0;
+}
+
+static ssize_t imu_lsm6dso_sysfs_scale_avail(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	return 0;
+}
 
 static int imu_lsm6dso_check_whoami(struct imu_lsm6dso_data *data)
 {
@@ -59,38 +119,19 @@ static int imu_lsm6dso_alloc_iiodev_acc(struct imu_lsm6dso_data *data)
 	iio_dev->available_scan_masks = scan_masks;
 	iio_dev->channels = imu_lsm6dso_acc_channels;
 	iio_dev->num_channels = ARRAY_SIZE(imu_lsm6dso_acc_channels);
+	iio_dev->info = &imu_lsm6dso_acc_info;
 
 	sensor = iio_priv(iio_dev);
 	sensor->id = IMU_LSM6DSO_ID_ACC;
 	sensor->data = data;
-
-
-	// continue - add cofg for this
-	sensor->odr = hw->settings->odr_table[id].odr_avl[0].milli_hz;
-	sensor->gain = hw->settings->fs_table[id].fs_avl[0].gain;
-	sensor->watermark = 1;
-
-	switch (id) {
-	case ST_LSM6DSX_ID_ACC:
-		iio_dev->info = &st_lsm6dsx_acc_info;
-		scnprintf(sensor->name, sizeof(sensor->name), "%s_accel",
-			  name);
-		break;
-	case ST_LSM6DSX_ID_GYRO:
-		iio_dev->info = &st_lsm6dsx_gyro_info;
-		scnprintf(sensor->name, sizeof(sensor->name), "%s_gyro",
-			  name);
-		break;
-	default:
-		return NULL;
-	}
-	// end of config for this
-
+	sensor->odr = 104; // temporary value, should be set based on added support for ODR configuration
+	sensor->gain = 1; // TODO
 
 	data->iio_dev_acc = iio_dev;
 
 	return 0;
 }
+
 
 static int imu_lsm6dso_probe(struct spi_device *spi)
 {
@@ -121,12 +162,14 @@ static int imu_lsm6dso_probe(struct spi_device *spi)
     imu_data->regmap = regmap;
 
     /* Check the WHOAMI register to verify communication with the device */
-	if (err < imu_lsm6dso_check_whoami(imu_data))
+	err = imu_lsm6dso_check_whoami(imu_data);
+	if (err < 0)
     {
         return err;
     }
-		
-	if(err < imu_lsm6dso_alloc_iiodev(imu_data))
+
+	err = imu_lsm6dso_alloc_iiodev_acc(imu_data);
+	if(err < 0)	
 	{
 		return err;
 	}

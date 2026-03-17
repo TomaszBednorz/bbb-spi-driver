@@ -5,8 +5,6 @@
 #include <linux/iio/iio.h>
 #include <linux/regmap.h>
 
-#include <stdint.h>
-
 #define DRIVER_NAME "imu-lsm6dso"
 
 #define IMU_LSM6DSO_REG_WHO_AM_I_ADDR  (0x0F)
@@ -32,11 +30,7 @@
 		.storagebits = 16,					\
 		.endianness = IIO_LE,					\
 	},								\
-	.event_spec = { \
-        .type = IIO_EV_TYPE_THRESH, \
-        .dir = IIO_EV_DIR_EITHER, \
-        .mask_separate = BIT(IIO_EV_INFO_VALUE) | BIT(IIO_EV_INFO_ENABLE), \
-    }, \
+	.event_spec = &imu_lsm6dso_event,				\
 	.num_event_specs = 1,						\
 }
 
@@ -75,8 +69,10 @@ struct imu_lsm6dso_data {
 struct imu_lsm6dso_sensor {
     enum imu_lsm6dso_sensor_id id;
     struct imu_lsm6dso_data *data;
-    uint32_t gain;
-	uint32_t odr;
+    u32 gain;
+	u32 odr;
 };
+
+extern const struct iio_event_spec imu_lsm6dso_event;
 
 #endif /* IMU_LSM6DSO_CFG_H */
