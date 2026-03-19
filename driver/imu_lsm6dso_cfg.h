@@ -93,7 +93,7 @@ struct imu_lsm6dso_data {
     struct regmap *regmap;
     struct iio_dev *iio_dev_acc;
     struct iio_dev *iio_dev_gyro;
-	struct imu_lsm6dso_settings *settings;
+	const struct imu_lsm6dso_settings *settings;
 };
 
 /**

@@ -15,6 +15,12 @@ static int imu_lsm6dso_write_raw_get_fmt(struct iio_dev *indio_dev, struct iio_c
 static ssize_t imu_lsm6dso_sysfs_sampling_frequency_avail(struct device *dev, struct device_attribute *attr, char *buf);
 static ssize_t imu_lsm6dso_sysfs_scale_avail(struct device *dev, struct device_attribute *attr, char *buf);
 
+static int imu_lsm6dso_read(struct imu_lsm6dso_data *data, unsigned int reg, unsigned int *val);
+static int imu_lsm6dso_bulk_read(struct imu_lsm6dso_data *data, unsigned int reg, void *val,  unsigned int len);
+static int imu_lsm6dso_write(struct imu_lsm6dso_data *data, unsigned int reg, unsigned int val);
+static int imu_lsm6dso_update_bit(struct imu_lsm6dso_data *data, unsigned int reg, unsigned int bitmask);
+static int imu_lsm6dso_update_bits(struct imu_lsm6dso_data *data, unsigned int reg, unsigned int mask, unsigned int val);
+
 static const struct regmap_config imu_lsm6dso_regmap_config = {
 	.reg_bits = 8,
 	.val_bits = 8,
@@ -49,9 +55,48 @@ static const struct iio_info imu_lsm6dso_acc_info = {
 	.write_raw_get_fmt = imu_lsm6dso_write_raw_get_fmt,
 };
 
+static int imu_lsm6dso_read_channel(struct imu_lsm6dso_sensor *sensor, unsigned int reg_addr, int *val)
+{
+	int err;
+	__le16 data;
+
+	err = imu_lsm6dso_bulk_read(sensor->data, reg_addr, &data, sizeof(data)); // Maybe some mutexes/ anablinges ensor is required - TODO documentatuion
+	*val = (s16)le16_to_cpu(data);
+
+	(void)err; /* Ignoring error for simplicity, should be handled properly in production code */
+
+	return IIO_VAL_INT;
+}
+
 static int imu_lsm6dso_read_raw(struct iio_dev *iio_dev, struct iio_chan_spec const *ch, int *val, int *val2, long mask)
 {
-	return 0;
+	struct imu_lsm6dso_sensor *sensor = iio_priv(iio_dev);
+	int ret;
+
+	switch (mask) {
+		case IIO_CHAN_INFO_RAW:
+			ret = iio_device_claim_direct_mode(iio_dev);
+			if (ret)
+				break;
+			ret = imu_lsm6dso_read_channel(sensor, (unsigned int)ch->address, val);
+			iio_device_release_direct_mode(iio_dev);
+			break;
+		case IIO_CHAN_INFO_SAMP_FREQ:
+			*val = sensor->odr / 1000;
+			*val2 = (sensor->odr % 1000) * 1000;
+			ret = IIO_VAL_INT_PLUS_MICRO;
+			break;
+		case IIO_CHAN_INFO_SCALE:
+			*val = 0;
+			*val2 = sensor->gain;
+			ret = IIO_VAL_INT_PLUS_MICRO;
+			break;
+		default:
+			ret = -EINVAL;
+			break;
+	}
+
+	return ret;
 }
 
 static int imu_lsm6dso_write_raw(struct iio_dev *iio_dev, struct iio_chan_spec const *chan, int val, int val2, long mask)
@@ -115,6 +160,11 @@ static int imu_lsm6dso_read(struct imu_lsm6dso_data *data, unsigned int reg, uns
 	return regmap_read(data->regmap, reg, val);
 }
 
+static int imu_lsm6dso_bulk_read(struct imu_lsm6dso_data *data, unsigned int reg, void *val,  unsigned int len)
+{
+	return regmap_bulk_read(data->regmap, reg, val, len);
+}
+
 static int imu_lsm6dso_write(struct imu_lsm6dso_data *data, unsigned int reg, unsigned int val)
 {
 	return regmap_write(data->regmap, reg, val);
@@ -171,14 +221,14 @@ static int imu_lsm6dso_alloc_iiodev_acc(struct imu_lsm6dso_data *data)
 	iio_dev->modes = INDIO_DIRECT_MODE;
 	iio_dev->available_scan_masks = scan_masks;
 	iio_dev->channels = imu_lsm6dso_acc_channels;
-	iio_dev->num_channels = ARRAY_SIZE(imu_lsm6dso_acc_channels);
+	iio_dev->num_channels = ARRAY_SIZE(imu_lsm6dso_acc_channels);  // Try to make it more generic (gyro)
 	iio_dev->info = &imu_lsm6dso_acc_info;
 
 	sensor = iio_priv(iio_dev);
 	sensor->id = IMU_LSM6DSO_ID_ACC;
 	sensor->data = data;
-	sensor->odr = 104; // temporary value, should be set based on added support for ODR configuration
-	sensor->gain = 1; // TODO
+	sensor->odr = data->settings->odr_tab[sensor->id].odr[0].odr_mhz;
+	sensor->gain = data->settings->gain_tab[sensor->id].gain[0].gain;
 
 	data->iio_dev_acc = iio_dev;
 
