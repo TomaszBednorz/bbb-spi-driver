@@ -71,12 +71,43 @@ static int imu_lsm6dso_write_raw_get_fmt(struct iio_dev *indio_dev, struct iio_c
 
 static ssize_t imu_lsm6dso_sysfs_sampling_frequency_avail(struct device *dev, struct device_attribute *attr, char *buf)
 {
-	return 0;
+	struct imu_lsm6dso_sensor *sensor = iio_priv(dev_get_drvdata(dev));
+	const struct imu_lsm6dso_odr_table *odr_table;
+	int i, len = 0;
+
+	odr_table = &sensor->data->settings->odr_tab[sensor->id];
+
+	for (i = 0; i < odr_table->size; i++) 
+	{
+		len += scnprintf(buf + len, PAGE_SIZE - len, 
+				"%d.%03d ", 
+				odr_table->odr[i].odr_mhz / 1000, 
+				odr_table->odr[i].odr_mhz % 1000);
+	}
+
+	len += scnprintf(buf + len, PAGE_SIZE - len, "\n");
+
+	return len;
 }
 
 static ssize_t imu_lsm6dso_sysfs_scale_avail(struct device *dev, struct device_attribute *attr, char *buf)
 {
-	return 0;
+	struct imu_lsm6dso_sensor *sensor = iio_priv(dev_get_drvdata(dev));
+	const struct imu_lsm6dso_gain_table *gain_table;
+	int i, len = 0;
+
+	gain_table = &sensor->data->settings->gain_tab[sensor->id];
+
+	for (i = 0; i < gain_table->size; i++) 
+	{
+		len += scnprintf(buf + len, PAGE_SIZE - len, 
+				"0.%06u ", 
+				gain_table->gain[i].gain);
+	}
+
+	len += scnprintf(buf + len, PAGE_SIZE - len, "\n");
+
+	return len;
 }
 
 static int imu_lsm6dso_read(struct imu_lsm6dso_data *data, unsigned int reg, unsigned int *val)
@@ -115,6 +146,8 @@ static int imu_lsm6dso_check_whoami(struct imu_lsm6dso_data *data)
 		dev_err(data->dev, "Unexpected WHOAMI value: 0x%02X\n", reg_val);
 		return -ENODEV;
 	}
+
+	data->settings = &imu_lsm6dso_settings;
 
 	return 0;
 }

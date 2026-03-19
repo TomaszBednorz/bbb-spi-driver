@@ -19,6 +19,9 @@
 #define IMU_LSM6DSO_REG_CTRL3_BDU_BITMASK    (BIT(6))
 #define IMU_LSM6DSO_REG_CTRL3_BOOT_BITMASK   (BIT(7))
 
+#define IMU_LSM6DSO_ODR_TABLE_SIZE			(10U)
+#define IMU_LSM6DSO_GAIN_TABLE_SIZE			(4U)
+
 #define IMU_LSM6DSO_CHANNEL_ACC(addr, mod, scan_idx)		\
 {									\
 	.type = IIO_ACCEL,						\
@@ -39,23 +42,50 @@
 	.num_event_specs = 1,						\
 }
 
-struct imu_lsm6dso_acc
-{
-    int16_t x;
-    int16_t y;
-    int16_t z;
-};
-
-struct imu_lsm6dso_gyro
-{
-    int16_t x;
-    int16_t y;
-    int16_t z;
-};
-
 enum imu_lsm6dso_sensor_id {
-	IMU_LSM6DSO_ID_ACC,
-	IMU_LSM6DSO_ID_GYRO,
+	IMU_LSM6DSO_ID_ACC = 0,
+	IMU_LSM6DSO_ID_GYRO = 1,
+	IMU_LSM6DSO_ID_MAX = 2
+};
+
+/**
+ * struct imu_lsm6dso_odr - Output data rate entry
+ * @odr_mhz: Output data rate in milli hertz (mHz).
+ * @reg_val: Value to be written to sensor register to set the ODR.
+ */
+struct imu_lsm6dso_odr
+{
+	u32 odr_mhz;
+	u8 reg_val;
+};
+
+/**
+ * struct imu_lsm6dso_gain - Sensor gain entry
+ * @gain: Sensor gain in physical unit, um/s^2/LSB for accelerometer and ... for gyroscope.
+ * @reg_val: Value to be written to sensor register to set the gain.
+
+*/
+struct imu_lsm6dso_gain
+{
+	u32 gain;
+	u8 reg_val;
+};
+
+struct imu_lsm6dso_odr_table
+{
+	struct imu_lsm6dso_odr odr[IMU_LSM6DSO_ODR_TABLE_SIZE];
+	u32 size;
+};
+
+struct imu_lsm6dso_gain_table
+{
+	struct imu_lsm6dso_gain gain[IMU_LSM6DSO_GAIN_TABLE_SIZE];
+	u32 size;
+};
+
+struct imu_lsm6dso_settings {
+	struct imu_lsm6dso_odr_table odr_tab[IMU_LSM6DSO_ID_MAX];
+	struct imu_lsm6dso_gain_table gain_tab[IMU_LSM6DSO_ID_MAX];
 };
 
 struct imu_lsm6dso_data {
@@ -63,13 +93,14 @@ struct imu_lsm6dso_data {
     struct regmap *regmap;
     struct iio_dev *iio_dev_acc;
     struct iio_dev *iio_dev_gyro;
+	struct imu_lsm6dso_settings *settings;
 };
 
 /**
  * struct imu_lsm6dso_sensor - IMU LSM6DS sensor instance
  * @hw: Pointer to instance of struct imu_lsm6dso_data.
  * @gain: Configured sensor sensitivity.
- * @odr: Output data rate of the sensor [Hz].
+ * @odr: Output data rate of the sensor [mHz].
  */
 struct imu_lsm6dso_sensor {
     enum imu_lsm6dso_sensor_id id;
@@ -79,5 +110,6 @@ struct imu_lsm6dso_sensor {
 };
 
 extern const struct iio_event_spec imu_lsm6dso_event;
+extern const struct imu_lsm6dso_settings imu_lsm6dso_settings;
 
 #endif /* IMU_LSM6DSO_CFG_H */
