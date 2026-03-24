@@ -7,6 +7,9 @@
 
 #include "imu_lsm6dso_cfg.h"
 
+static int imu_lsm6dso_get_odr_reg_val(struct imu_lsm6dso_sensor *sensor, u32 odr, u8 *reg_val);
+static int imu_lsm6dso_get_gain_reg_val(struct imu_lsm6dso_sensor *sensor, u32 gain, u8 *reg_val);
+static int imu_lsm6dso_sensor_enable(struct imu_lsm6dso_sensor *sensor);
 
 static int imu_lsm6dso_read_raw(struct iio_dev *iio_dev, struct iio_chan_spec const *ch, int *val, int *val2, long mask);
 static int imu_lsm6dso_write_raw(struct iio_dev *iio_dev, struct iio_chan_spec const *chan, int val, int val2, long mask);
@@ -55,12 +58,89 @@ static const struct iio_info imu_lsm6dso_acc_info = {
 	.write_raw_get_fmt = imu_lsm6dso_write_raw_get_fmt,
 };
 
+static int imu_lsm6dso_get_odr_reg_val(struct imu_lsm6dso_sensor *sensor, u32 odr, u8 *reg_val)
+{
+	const struct imu_lsm6dso_odr_table *table;
+	u32 i;
+
+	if (!sensor || !sensor->data || !sensor->data->settings || !reg_val)
+		return -EINVAL;
+
+	if (sensor->id >= IMU_LSM6DSO_ID_MAX)
+		return -EINVAL;
+
+	table = &sensor->data->settings->odr_tab[sensor->id];
+
+	for (i = 0; i < table->size; i++) {
+		if (table->odr[i].odr_mhz == odr) {
+			*reg_val = table->odr[i].reg_val;
+			return 0;
+		}
+	}
+
+	return -ENOENT;
+}
+
+static int imu_lsm6dso_get_gain_reg_val(struct imu_lsm6dso_sensor *sensor, u32 gain, u8 *reg_val)
+{
+	const struct imu_lsm6dso_gain_table *table;
+	u32 i;
+
+	if (!sensor || !sensor->data || !sensor->data->settings || !reg_val)
+		return -EINVAL;
+
+	if (sensor->id >= IMU_LSM6DSO_ID_MAX)
+		return -EINVAL;
+
+	table = &sensor->data->settings->gain_tab[sensor->id];
+
+	for (i = 0; i < table->size; i++) {
+		if (table->gain[i].gain == gain) {
+			*reg_val = table->gain[i].reg_val;
+			return 0;
+		}
+	}
+
+	return -ENOENT;
+}
+
+static int imu_lsm6dso_sensor_enable(struct imu_lsm6dso_sensor *sensor)
+{
+	int err = 0;
+	u8 odr_reg_val;
+	u8 gain_reg_val;
+
+	/* Set default ODR and gain for accelerometer */
+	err = imu_lsm6dso_get_odr_reg_val(sensor, sensor->odr, &odr_reg_val);
+	if (err < 0)
+		return err;
+
+	err = imu_lsm6dso_get_gain_reg_val(sensor, sensor->gain, &gain_reg_val);
+	if (err < 0)
+		return err;
+
+	err = imu_lsm6dso_update_bits(sensor->data, IMU_LSM6DSO_REG_CTRL1_ADDR, 
+								  IMU_LSM6DSO_REG_CTRL1_ODR_MASK | IMU_LSM6DSO_REG_CTRL1_FS_MASK, 
+								  (odr_reg_val << IMU_LSM6DSO_REG_CTRL1_ODR_SHIFT) |
+								  (gain_reg_val << IMU_LSM6DSO_REG_CTRL1_FS_SHIFT));
+
+	if (!err)
+	{
+		sensor->enabled = true;
+
+		/* Wait for the sensor to stabilize after enabling */
+		msleep(2);
+	}
+	
+	return err;
+}
+
 static int imu_lsm6dso_read_channel(struct imu_lsm6dso_sensor *sensor, unsigned int reg_addr, int *val)
 {
 	int err;
 	__le16 data;
 
-	err = imu_lsm6dso_bulk_read(sensor->data, reg_addr, &data, sizeof(data)); // Maybe some mutexes/ anablinges ensor is required - TODO documentatuion
+	err = imu_lsm6dso_bulk_read(sensor->data, reg_addr, &data, sizeof(data));
 	*val = (s16)le16_to_cpu(data);
 
 	(void)err; /* Ignoring error for simplicity, should be handled properly in production code */
@@ -75,9 +155,15 @@ static int imu_lsm6dso_read_raw(struct iio_dev *iio_dev, struct iio_chan_spec co
 
 	switch (mask) {
 		case IIO_CHAN_INFO_RAW:
+			if(false == sensor->enabled)
+			{
+				ret = imu_lsm6dso_sensor_enable(sensor);
+				if (ret < 0)
+					return ret;
+			}
 			ret = iio_device_claim_direct_mode(iio_dev);
-			if (ret)
-				break;
+			if (ret < 0)
+				return ret;
 			ret = imu_lsm6dso_read_channel(sensor, (unsigned int)ch->address, val);
 			iio_device_release_direct_mode(iio_dev);
 			break;
@@ -229,6 +315,7 @@ static int imu_lsm6dso_alloc_iiodev_acc(struct imu_lsm6dso_data *data)
 	sensor->data = data;
 	sensor->odr = data->settings->odr_tab[sensor->id].odr[0].odr_mhz;
 	sensor->gain = data->settings->gain_tab[sensor->id].gain[0].gain;
+	sensor->enabled = false;
 
 	data->iio_dev_acc = iio_dev;
 
